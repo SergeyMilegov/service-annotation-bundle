@@ -9,7 +9,7 @@ namespace ServiceAnnotationBundle\Annotation;
  *
  * should have only one public method
  */
-class OneMethodService extends Service
+class SingleMethodService extends Service
 {
 
 }

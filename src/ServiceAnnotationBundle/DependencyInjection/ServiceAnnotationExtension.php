@@ -4,9 +4,8 @@ declare(strict_types=1);
 namespace ServiceAnnotationBundle\DependencyInjection;
 
 use ReflectionException;
-use ServiceAnnotationBundle\Annotation\OneMethodService;
+use ServiceAnnotationBundle\Annotation\SingleMethodService;
 use ServiceAnnotationBundle\Annotation\Service;
-use ServiceAnnotationBundle\Annotation\Tag;
 use Doctrine\Common\Annotations\Annotation\Target;
 use Doctrine\Common\Annotations\DocParser;
 use ReflectionClass;
@@ -42,20 +41,10 @@ class ServiceAnnotationExtension extends Extension
         $bundlesMetadata = $container->getParameter('kernel.bundles_metadata');
         $env = $container->getParameter('kernel.environment');
 
-        //autoload classes.
-        //@todo fix it somehow.
-        class_exists(OneMethodService::class);
-        class_exists(Service::class);
-        class_exists(Tag::class);
-
         $parser = new DocParser();
         $parser->setIgnoreNotImportedAnnotations(true);
         $parser->setTarget(Target::TARGET_CLASS);
-        $parser->setImports([
-            'onemethodservice' => OneMethodService::class,
-            'service' => Service::class,
-            'tag' => Tag::class,
-        ]);
+        $parser->addNamespace((new ReflectionClass(Service::class))->getNamespaceName());
 
         foreach ($bundlesMetadata as $bundleMetadata) {
             if (false !== strpos($bundleMetadata['path'], 'vendor/')) {
@@ -97,7 +86,7 @@ class ServiceAnnotationExtension extends Extension
 
                 $annotation = $this->getServiceAnnotation($annotations);
 
-                if ($annotation instanceof OneMethodService && $this->countPublicMethods($reflection) > 1) {
+                if ($annotation instanceof SingleMethodService && $this->countPublicMethods($reflection) > 1) {
                     throw new DiRuntimeException(sprintf('class %s should have only one public method', $class));
                 }
 
