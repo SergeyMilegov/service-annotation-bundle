@@ -26,7 +26,7 @@ class Service
     /**
      * @var bool
      */
-    public $pubic = false;
+    public $public = false;
 
     /**
      * @var bool

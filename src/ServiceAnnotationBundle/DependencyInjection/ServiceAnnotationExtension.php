@@ -99,7 +99,7 @@ class ServiceAnnotationExtension extends Extension
                 $definition->setAutowired($annotation->autowired);
                 $definition->setAutoconfigured($annotation->autoconfigured);
                 $definition->setLazy($annotation->lazy);
-                $definition->setPublic($annotation->pubic);
+                $definition->setPublic($annotation->public);
                 $definition->setAbstract($annotation->abstract);
 
                 if (!empty($annotation->arguments)) {
