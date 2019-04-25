@@ -1,7 +1,7 @@
 {
   "name" : "sergey-milegov/service-annotation-bundle",
   "description" : "Symfony bundle for service annotations",
-  "version" : "1.0.0",
+  "version" : "1.0.1",
   "type" : "symfony-bundle",
   "homepage": "https://github.com/SergeyMilegov/service-annotation-bundle",
   "license" : "MIT",
