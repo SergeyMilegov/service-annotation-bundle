@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace ServiceAnnotationBundle\Annotation;
 
-use Symfony\Component\DependencyInjection\Exception\RuntimeException;
-
 /**
  * @Annotation
  * @Target({"CLASS"})
@@ -13,6 +11,11 @@ use Symfony\Component\DependencyInjection\Exception\RuntimeException;
  */
 class Service
 {
+    /**
+     * @var string
+     */
+    public $id = null;
+
     /**
      * @var bool
      */
@@ -67,4 +70,9 @@ class Service
      * @var array<string>
      */
     public $envs = [];
+
+    /**
+     * @var int
+     */
+    public $priority = 0;
 }

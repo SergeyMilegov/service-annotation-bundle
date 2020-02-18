@@ -11,6 +11,7 @@ use Doctrine\Common\Annotations\DocParser;
 use ReflectionClass;
 use ReflectionMethod;
 use RuntimeException;
+use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -45,6 +46,8 @@ class ServiceAnnotationExtension extends Extension
         $parser->setIgnoreNotImportedAnnotations(true);
         $parser->setTarget(Target::TARGET_CLASS);
         $parser->addNamespace((new ReflectionClass(Service::class))->getNamespaceName());
+
+        $services = [];
 
         foreach ($bundlesMetadata as $bundleMetadata) {
             if (false !== strpos($bundleMetadata['path'], 'vendor/')) {
@@ -94,60 +97,103 @@ class ServiceAnnotationExtension extends Extension
                     continue;
                 }
 
-                $definition = new Definition($class);
-
-                $definition->setAutowired($annotation->autowired);
-                $definition->setAutoconfigured($annotation->autoconfigured);
-                $definition->setLazy($annotation->lazy);
-                $definition->setPublic($annotation->public);
-                $definition->setAbstract($annotation->abstract);
-
-                if (!empty($annotation->arguments)) {
-                    $arguments = $this->handleServices($annotation->arguments);
-                    $definition->setArguments($arguments);
-                }
-
-                foreach ($annotation->tags as $tag) {
-                    $definition->addTag($tag->name, $tag->attributes);
-                }
-
-                if (!empty($annotation->methodCalls)) {
-                    $definition->setMethodCalls($annotation->methodCalls);
-                }
-
-                if (!empty($annotation->factory)) {
-                    $factory = $this->handleServices($annotation->factory);
-
-                    $definition->setFactory($factory);
-                }
-
-                if (!empty($annotation->decorates)) {
-                    $definition->setDecoratedService($annotation->decorates);
-                }
-
-                $container->setDefinition($class, $definition);
+                $services[] = [
+                    'class' => $class,
+                    'annotation' => $annotation,
+                ];
             }
+        }
+
+        usort($services, static function ($a, $b) {
+            return $a['annotation']->priority - $b['annotation']->priority;
+        });
+
+        foreach ($services as $service) {
+            /** @var Service $annotation */
+            $annotation = $service['annotation'];
+            $class = $service['class'];
+
+            $definition = new Definition($class);
+
+            $definition->setAutowired($annotation->autowired);
+            $definition->setAutoconfigured($annotation->autoconfigured);
+            $definition->setLazy($annotation->lazy);
+            $definition->setPublic($annotation->public);
+            $definition->setAbstract($annotation->abstract);
+
+            if (!empty($annotation->arguments)) {
+                $arguments = $this->handleTaggedIterator($annotation->arguments);
+                $arguments = $this->handleTaggedIterator($arguments);
+
+                $definition->setArguments($arguments);
+            }
+
+            foreach ($annotation->tags as $tag) {
+                $definition->addTag($tag->name, $tag->attributes);
+            }
+
+            if (!empty($annotation->methodCalls)) {
+                $definition->setMethodCalls($annotation->methodCalls);
+            }
+
+            if (!empty($annotation->factory)) {
+                $factory = $this->handleOldStyleServices($annotation->factory);
+                $factory = $this->handleTaggedIterator($factory);
+
+                $definition->setFactory($factory);
+            }
+
+            if (!empty($annotation->decorates)) {
+                $definition->setDecoratedService($annotation->decorates);
+            }
+
+            $id = $annotation->id ?? $class;
+
+            $container->setDefinition($id, $definition);
         }
     }
 
     /**
-     * handle old style services
-     *
      * @param array $arguments
      *
      * @return array
      */
-    private function handleServices(array $arguments): array
+    private function handleOldStyleServices(array $arguments): array
     {
         $res = [];
         foreach ($arguments as $key => $value) {
             if (is_array($value)) {
-                $res[$key] = $this->handleServices($value);
+                $res[$key] = $this->handleOldStyleServices($value);
                 continue;
             }
 
-            if (0 === strpos($value, '@')) {
+            if (is_string($value) && 0 === strpos($value, '@')) {
                 $value = new Reference(substr($value, 1));
+            }
+
+            $res[$key] = $value;
+        }
+
+        return $res;
+    }
+
+    /**
+     * @param array $arguments
+     *
+     * @return array
+     */
+    private function handleTaggedIterator(array $arguments): array
+    {
+        $tagged = '!tagged ';
+        $res = [];
+        foreach ($arguments as $key => $value) {
+            if (is_array($value)) {
+                $res[$key] = $this->handleTaggedIterator($value);
+                continue;
+            }
+
+            if (is_string($value) && 0 === strpos($value, $tagged)) {
+                $value = new TaggedIteratorArgument(substr($value, strlen($tagged)));
             }
 
             $res[$key] = $value;
