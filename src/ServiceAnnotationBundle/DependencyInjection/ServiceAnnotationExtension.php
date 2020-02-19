@@ -122,7 +122,7 @@ class ServiceAnnotationExtension extends Extension
             $definition->setAbstract($annotation->abstract);
 
             if (!empty($annotation->arguments)) {
-                $arguments = $this->handleTaggedIterator($annotation->arguments);
+                $arguments = $this->handleOldStyleServices($annotation->arguments);
                 $arguments = $this->handleTaggedIterator($arguments);
 
                 $definition->setArguments($arguments);
