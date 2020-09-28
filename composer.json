@@ -1,7 +1,7 @@
 {
   "name" : "sergey-milegov/service-annotation-bundle",
   "description" : "Symfony bundle for service annotations",
-  "version" : "1.0.2",
+  "version" : "1.0.3",
   "type" : "symfony-bundle",
   "homepage": "https://github.com/SergeyMilegov/service-annotation-bundle",
   "license" : "MIT",
@@ -12,8 +12,8 @@
   }],
   "require" : {
     "php": "^7.0",
-    "symfony/finder": "^3.4|^4.0",
-    "symfony/dependency-injection": "^3.4|^4.0",
+    "symfony/finder": "^3.4|^4.0|^5.0",
+    "symfony/dependency-injection": "^3.4|^4.0|^5.0",
     "doctrine/annotations": "^1.4"
   },
   "autoload" : {
