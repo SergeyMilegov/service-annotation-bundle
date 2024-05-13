@@ -9,6 +9,7 @@ namespace ServiceAnnotationBundle\Annotation;
  *
  * should have only one public method
  */
+#[\Attribute(\Attribute::TARGET_CLASS)]
 class SingleMethodService extends Service
 {
 
