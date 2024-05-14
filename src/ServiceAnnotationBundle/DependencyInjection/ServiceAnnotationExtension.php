@@ -8,6 +8,7 @@ use ServiceAnnotationBundle\Annotation\SingleMethodService;
 use ServiceAnnotationBundle\Annotation\Service;
 use Doctrine\Common\Annotations\Annotation\Target;
 use Doctrine\Common\Annotations\DocParser;
+use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionMethod;
 use RuntimeException;
@@ -23,8 +24,6 @@ use Symfony\Component\DependencyInjection\Exception\RuntimeException as DiRuntim
 class ServiceAnnotationExtension extends Extension
 {
     /**
-     * {@inheritdoc}
-     *
      * @throws ReflectionException
      */
     public function load(array $configs, ContainerBuilder $container)
@@ -33,8 +32,6 @@ class ServiceAnnotationExtension extends Extension
     }
 
     /**
-     * @param ContainerBuilder $container
-     *
      * @throws ReflectionException
      */
     private function loadServices(ContainerBuilder $container)
@@ -75,89 +72,95 @@ class ServiceAnnotationExtension extends Extension
                 }
 
                 $reflection = new ReflectionClass($class);
+
+                $attributes = $reflection->getAttributes(Service::class, ReflectionAttribute::IS_INSTANCEOF);
+                if (count($attributes) > 0) {
+                    /** @var Service $attribute */
+                    $attribute = $attributes[0]->newInstance();
+
+                    if ($attribute instanceof SingleMethodService && $this->countPublicMethods($reflection) > 1) {
+                        throw new DiRuntimeException(sprintf('class %s should have only one public method', $class));
+                    }
+
+                    if (!empty($attribute->envs) && !in_array($env, $attribute->envs, true)) {
+                        continue;
+                    }
+
+                    $services[$class] = $attribute;
+
+                    continue;
+                }
+
                 $docComment = $reflection->getDocComment();
+                if (false !== $docComment) {
+                    $annotations = $parser->parse($docComment, 'class ' . $class);
 
-                if (false === $docComment) {
-                    continue;
+                    if (false === $this->isService($annotations)) {
+                        continue;
+                    }
+
+                    $annotation = $this->getServiceAnnotation($annotations);
+
+                    if ($annotation instanceof SingleMethodService && $this->countPublicMethods($reflection) > 1) {
+                        throw new DiRuntimeException(sprintf('class %s should have only one public method', $class));
+                    }
+
+                    if (!empty($annotation->envs) && !in_array($env, $annotation->envs, true)) {
+                        continue;
+                    }
+
+
+                    $services[$class] = $annotation;
                 }
-
-                $annotations = $parser->parse($docComment, 'class ' . $class);
-
-                if (false === $this->isService($annotations)) {
-                    continue;
-                }
-
-                $annotation = $this->getServiceAnnotation($annotations);
-
-                if ($annotation instanceof SingleMethodService && $this->countPublicMethods($reflection) > 1) {
-                    throw new DiRuntimeException(sprintf('class %s should have only one public method', $class));
-                }
-
-                if (!empty($annotation->envs) && !in_array($env, $annotation->envs, true)) {
-                    continue;
-                }
-
-                $services[] = [
-                    'class' => $class,
-                    'annotation' => $annotation,
-                ];
             }
         }
 
-        usort($services, static function ($a, $b) {
-            return $a['annotation']->priority - $b['annotation']->priority;
+        uasort($services, static function (Service $a, Service $b) {
+            return $a->priority - $b->priority;
         });
 
-        foreach ($services as $service) {
-            /** @var Service $annotation */
-            $annotation = $service['annotation'];
-            $class = $service['class'];
-
+        /** @var Service $service */
+        foreach ($services as $class => $service) {
             $definition = new Definition($class);
 
-            $definition->setAutowired($annotation->autowired);
-            $definition->setAutoconfigured($annotation->autoconfigured);
-            $definition->setLazy($annotation->lazy);
-            $definition->setPublic($annotation->public);
-            $definition->setAbstract($annotation->abstract);
+            $definition->setAutowired($service->autowired);
+            $definition->setAutoconfigured($service->autoconfigured);
+            $definition->setLazy($service->lazy);
+            $definition->setPublic($service->public);
+            $definition->setAbstract($service->abstract);
 
-            if (!empty($annotation->arguments)) {
-                $arguments = $this->handleOldStyleServices($annotation->arguments);
+            if (!empty($service->arguments)) {
+                $arguments = $this->handleOldStyleServices($service->arguments);
                 $arguments = $this->handleTaggedIterator($arguments);
 
                 $definition->setArguments($arguments);
             }
 
-            foreach ($annotation->tags as $tag) {
+            foreach ($service->tags as $tag) {
                 $definition->addTag($tag->name, $tag->attributes);
             }
 
-            if (!empty($annotation->methodCalls)) {
-                $definition->setMethodCalls($annotation->methodCalls);
+            if (!empty($service->methodCalls)) {
+                $definition->setMethodCalls($service->methodCalls);
             }
 
-            if (!empty($annotation->factory)) {
-                $factory = $this->handleOldStyleServices($annotation->factory);
+            if (!empty($service->factory)) {
+                $factory = $this->handleOldStyleServices($service->factory);
                 $factory = $this->handleTaggedIterator($factory);
 
                 $definition->setFactory($factory);
             }
 
-            if (!empty($annotation->decorates)) {
-                $definition->setDecoratedService($annotation->decorates);
+            if (!empty($service->decorates)) {
+                $definition->setDecoratedService($service->decorates);
             }
 
-            $id = $annotation->id ?? $class;
+            $id = $service->id ?? $class;
 
             $container->setDefinition($id, $definition);
         }
     }
 
-    /**
-     * @param array $arguments
-     *
-     * @return array
-     */
     private function handleOldStyleServices(array $arguments): array
     {
         $res = [];
@@ -177,11 +180,6 @@ class ServiceAnnotationExtension extends Extension
         return $res;
     }
 
-    /**
-     * @param array $arguments
-     *
-     * @return array
-     */
     private function handleTaggedIterator(array $arguments): array
     {
         $tagged = '!tagged ';
@@ -202,12 +200,6 @@ class ServiceAnnotationExtension extends Extension
         return $res;
     }
 
-    /**
-     * @param string $relativePathname
-     * @param string $bundleNamespace
-     *
-     * @return string
-     */
     private function getClassname(string $relativePathname, string $bundleNamespace): string
     {
         $class = $relativePathname;
@@ -217,11 +209,6 @@ class ServiceAnnotationExtension extends Extension
         return $class;
     }
 
-    /**
-     * @param array $annotations
-     *
-     * @return bool
-     */
     private function isService(array $annotations): bool
     {
         foreach ($annotations as $annotation) {
@@ -233,11 +220,6 @@ class ServiceAnnotationExtension extends Extension
         return false;
     }
 
-    /**
-     * @param array $annotations
-     *
-     * @return Service
-     */
     private function getServiceAnnotation(array $annotations): Service
     {
         foreach ($annotations as $annotation) {
@@ -247,11 +229,6 @@ class ServiceAnnotationExtension extends Extension
         }
     }
 
-    /**
-     * @param ReflectionClass $reflection
-     *
-     * @return int
-     */
     private function countPublicMethods(ReflectionClass $reflection): int
     {
         $count = 0;
